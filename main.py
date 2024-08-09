@@ -1,6 +1,18 @@
+"""
+Author: Lorenzo Ferri   09/08/2024
+
+Questo è un programma che estrapola automaticamente i dati dal database ERDDAP 
+e crea un csv con, in ogni singola riga, un record di tempo seguito da longitudine
+latitudine, i parametri dei vari profili (sempre sulla stessa riga) e i valori 
+di time series.
+Se il server su cui gira questo script si blocca, esso automaticamente tiene 
+conto dell'ultima data effettiva di acquisizione e riprende da quel punto
+NB assolutamente non cancellare il file "dateList.txt" o cancellarne il contenuto.
+
+"""
 
 # %% importazione delle librerie
-import os
+
 from urllib.request import urlopen
 from bs4 import BeautifulSoup
 from datetime import datetime 
@@ -8,18 +20,13 @@ import pandas as pd
 import sys
 from io import StringIO
 
-# %% variabili da settare 
+from dfModifier import noHeaderDf, dfToOneRow
+
+ # %% variabili da settare 
 
 startUrlString=["https://nodc.ogs.it/erddap/tabledap/CURRISO_PR.htmlTable?time%2Clatitude%2Clongitude%2Cdepth%2CVCSP%2CVCSP_QC%2CEWCT%2CEWCT_QC%2CNSCT%2CNSCT_QC&time%3E",
-                    "https://nodc.ogs.it/erddap/tabledap/CURRISO_TS.htmlTable?time%2Clatitude%2Clongitude%2CPRES%2CPRES_QC%2CTEMP%2CTEMP_QC%2CRVFL%2CRVFL_QC&time%3E"];
+                "https://nodc.ogs.it/erddap/tabledap/CURRISO_TS.htmlTable?time%2Clatitude%2Clongitude%2CPRES%2CPRES_QC%2CTEMP%2CTEMP_QC%2CRVFL%2CRVFL_QC&time%3E"];
 endUrlString=["&orderBy(%22time%2Cdepth%22)","&orderBy(%22time%22)"];
-
-# %% definizione variabili globali
-
-newUrlString=[]
-dfList=[]
-dfProfile=[]
-finalDf=pd.DataFrame()
 
 # %% controllo dateList per definizione datetime
 
@@ -34,6 +41,9 @@ if tempTime =="":
 newDateTime=datetime.strptime(tempTime, "%d-%m-%Y %H:%M:%S")
 
 # %% lettura dei dati web attraverso BeautifulSoup
+
+newUrlString=[]
+dfList=[]
 
 try:
     for urlIdx in range(len(startUrlString)):
@@ -62,6 +72,8 @@ except:
     
 # %% creazione finalDf con data e ora
 
+finalDf=pd.DataFrame()
+
 finalDf['tempDate'] = pd.to_datetime(dfList[1]['time','UTC'], format='%Y-%m-%dT%H:%M:%SZ');  
 finalDf['date'] = finalDf['tempDate'].dt.strftime('%d/%m/%Y');
 finalDf['time'] = finalDf['tempDate'].dt.strftime('%H:%M:%S');
@@ -69,42 +81,37 @@ finalDf=finalDf.drop('tempDate',axis='columns');
 finalDf['latitude'] = dfList[1]['latitude','degrees_north']
 finalDf['longitude'] = dfList[1]['longitude','degrees_east']
 
-# %% elaborazione dataframe con profili  
+#%% elaborazione dataframe con profili  
 
 dfList[0]=dfList[0].drop(['latitude','longitude','VCSP_QC','EWCT_QC','NSCT_QC'],axis='columns');
-dfList[0].to_csv("temp.csv",index=False,header=False)
-dfList[0] = pd.read_csv('temp.csv',sep=",", header=None)
+
+dfList[0]=noHeaderDf(dfList[0])
 
 profileColoumnName=["time","depth", "VCSP", "EWCT", "NSCT"]
 dfList[0]= dfList[0].set_axis(profileColoumnName, axis=1)
 
 gr=dfList[0].groupby('time')
 keys=list(gr.groups.keys())
-finalProfileDf=pd.DataFrame()
+finalProfileDf=pd.DataFrame() 
 
-
-# %%
+dfProfile=[]
 
 for keyIdx in range (len(keys)):  
     dfProfile.append(gr.get_group(keys[keyIdx]))
     dfProfile[keyIdx]=dfProfile[keyIdx].drop('time',axis='columns');
     dfProfile[keyIdx].insert(0,"#",list(range(1,len(dfProfile[keyIdx])+1)))
-    dfProfile[keyIdx].to_csv("temp.csv",index=False,header=False)
-    tempStringObj=open("temp.csv",'r')
-    tempString=tempStringObj.read()
-    tempStringObj.close()
-    tempStringMod = tempString.replace("\n", ",")
-    tempStringMod=tempStringMod[:-1]
-    tempStringObj=open("temp.csv",'w')
-    tempStringObj.write(tempStringMod)
-    tempStringObj.close()
-    dfProfile[keyIdx]=pd.read_csv("temp.csv",header=None)
+
+    dfProfile[keyIdx]=dfToOneRow(dfProfile[keyIdx])
+    
     finalProfileDf=pd.concat([finalProfileDf,dfProfile[keyIdx]],ignore_index=True)
 
 #%% elaborazione dataframe con timeseries
+
 dfList[1]=dfList[1].drop(['time','latitude','longitude','PRES_QC','TEMP_QC','RVFL_QC'],axis='columns');
-dfList[1].to_csv("temp.csv",index=False,header=False)
-dfList[1] = pd.read_csv('temp.csv',sep=",", header=None) 
+
+dfList[1]=noHeaderDf(dfList[1])
+
+#%% concatenazione diversi dataframe in quello finale
 
 finalDf=pd.concat([finalDf,dfList[1], finalProfileDf],axis=1)    
     
@@ -125,11 +132,10 @@ csvFileName='csv/ERDDAP_CurrIso_'+currentDateTimeString+'.csv'
   
 finalDf.to_csv(csvFileName,index=False)    
 
-os.remove("temp.csv")
-
 endTime=dfList[0].time[len(dfList[0])-1]
 endTime=datetime.strptime(endTime, '%Y-%m-%dT%H:%M:%SZ')
 timeString=datetime.strftime(endTime, '%d-%m-%Y %H:%M:%S')
+
 tempTimeObj=open("dateList.txt",'w')
 tempTimeObj.write(timeString)
 tempTimeObj.close() 
