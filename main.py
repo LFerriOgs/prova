@@ -6,10 +6,10 @@ from bs4 import BeautifulSoup
 from datetime import datetime 
 import pandas as pd
 import sys
+from io import StringIO
 
 # %% variabili da settare 
 
-minutes=50;
 startUrlString=["https://nodc.ogs.it/erddap/tabledap/CURRISO_PR.htmlTable?time%2Clatitude%2Clongitude%2Cdepth%2CVCSP%2CVCSP_QC%2CEWCT%2CEWCT_QC%2CNSCT%2CNSCT_QC&time%3E",
                     "https://nodc.ogs.it/erddap/tabledap/CURRISO_TS.htmlTable?time%2Clatitude%2Clongitude%2CPRES%2CPRES_QC%2CTEMP%2CTEMP_QC%2CRVFL%2CRVFL_QC&time%3E"];
 endUrlString=["&orderBy(%22time%2Cdepth%22)","&orderBy(%22time%22)"];
@@ -26,26 +26,16 @@ finalDf=pd.DataFrame()
 tempTimeObj=open("dateList.txt",'r')
 tempTime=tempTimeObj.read()
 tempTimeObj.close()
+
+if tempTime =="":
+    print("\nil file dateList deve contenere la data da cui si vuole far partire l'acquisizione del record\n")
+    sys.exit()  
+    
 newDateTime=datetime.strptime(tempTime, "%d-%m-%Y %H:%M:%S")
 
-
-# tempStringObj=open("temp.csv",'w')
-# tempStringObj.write(tempStringMod)
-# tempStringObj.close()
-
-# %% definizione del datetime corretto
-
-# currentDateTime = datetime.now() 
-# print(currentDateTime)
-
-# dateTimeSeconds=calendar.timegm(currentDateTime.timetuple())
-# dateTimeSeconds=dateTimeSeconds-minutes*60
-# newDateTime=datetime.fromtimestamp(dateTimeSeconds)
-# print(newDateTime)
-
 # %% lettura dei dati web attraverso BeautifulSoup
+
 try:
-    
     for urlIdx in range(len(startUrlString)):
     
     #-------------------------composizione della stringa per la query al sito 
@@ -58,17 +48,16 @@ try:
                     "%3A"+ \
                     newDateTime.strftime("%SZ") +\
                     endUrlString[urlIdx] );
-        print(newUrlString[urlIdx])
 
     # -- creazione oggetto di beatifulsoup e relativo dataframe pandas
-    
+        
         html = urlopen(newUrlString[urlIdx]);
         soup= BeautifulSoup(html.read(),'html.parser');
         htmlTable=soup.find_all("table",{"class":"erd commonBGColor nowrap"});
-        df=pd.read_html(str(htmlTable))[0];
+        df=pd.read_html(StringIO(str(htmlTable)))[0];
         dfList.append(df);
-
 except:  
+    print("\nnon ci sono nuovi record\n")
     sys.exit()
     
 # %% creazione finalDf con data e ora
