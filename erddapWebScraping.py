@@ -8,7 +8,7 @@ di time series.
 Se il server su cui gira questo script si blocca, esso automaticamente tiene 
 conto dell'ultima data effettiva di acquisizione e riprende da quel punto.
 
-NB) assolutamente non cancellare il file "dateList.txt" o cancellarne o modiicarne
+NB) assolutamente non cancellare il file "dateList.txt" o cancellarne o modificarne
     il contenuto.
 
 """
@@ -22,6 +22,7 @@ import pandas as pd
 import sys
 from io import StringIO
 from numpy import mean
+from cartToPolar import Coord_Cart_to_Polar
 
 from dfModifier import noHeaderDf, dfToOneRow
 
@@ -38,7 +39,8 @@ tempTime=tempTimeObj.read()
 tempTimeObj.close()
 
 if tempTime =="":
-    print("\nil file dateList deve contenere la data da cui si vuole far partire l'acquisizione del record\n")
+    print("\nil file dateList deve contenere la data da cui si vuole \
+          far partire l'acquisizione del record\n")
     sys.exit()  
     
 newDateTime=datetime.strptime(tempTime, "%Y-%m-%dT%H-%M-%SZ")
@@ -78,7 +80,8 @@ except:
 timeDf=pd.DataFrame()
 finalDfAvrg=pd.DataFrame()
 
-timeDf['tempDate'] = pd.to_datetime(dfList[1]['time','UTC'], format='%Y-%m-%dT%H:%M:%SZ');  
+timeDf['tempDate'] = pd.to_datetime(dfList[1]['time','UTC'], \
+                                    format='%Y-%m-%dT%H:%M:%SZ');  
 timeDf['dateTime'] = timeDf['tempDate'].dt.strftime("%Y-%m-%dT%H-%M-%SZ");
 timeDf=timeDf.drop('tempDate',axis='columns');
 timeDf['latitude'] = dfList[1]['latitude','degrees_north']
@@ -86,7 +89,9 @@ timeDf['longitude'] = dfList[1]['longitude','degrees_east']
 
 #%% elaborazione dataframe con profili  
 
-dfList[0]=dfList[0].drop(['latitude','longitude','VCSP_QC','EWCT_QC','NSCT_QC'],axis='columns');
+dfList[0]=dfList[0].drop(['latitude','longitude','VCSP_QC','EWCT_QC','NSCT_QC'], \
+                         axis='columns'); 
+                         
 
 dfList[0]=noHeaderDf(dfList[0])
 
@@ -111,28 +116,37 @@ for keyIdx in range (len(keys)):
 
     #parte di riempimento del df con le medie
     dfProfileMultRow=gr.get_group(keys[keyIdx])
-    dfProfileMultRow=dfProfileMultRow.drop(['time','depth','VCSP'],axis='columns');
+    dfProfileMultRow=dfProfileMultRow.drop(['time','depth','VCSP'],\
+                                           axis='columns');
     dfProfileMultRow=dfProfileMultRow.reset_index(drop=True)
     
     if len(dfProfileMultRow) % 2 == 1:
         dfProfileMultRow=dfProfileMultRow.drop(dfProfileMultRow.index[0])
         dfProfileMultRow=dfProfileMultRow.reset_index(drop=True)
     
-    
-    
-   
-    EWCT_BottomAvrg=round(mean(dfProfileMultRow['EWCT'].to_list()[0:int((len(dfProfileMultRow)/2))]),3)
-    NSCT_BottomAvrg=round(mean(dfProfileMultRow['NSCT'].to_list()[0:int((len(dfProfileMultRow)/2))]),3)
-    EWCT_TopAvrg=round(mean(dfProfileMultRow['EWCT'].to_list()[int((len(dfProfileMultRow)/2)):]),3)
-    NSCT_TopAvrg=round(mean(dfProfileMultRow['NSCT'].to_list()[int((len(dfProfileMultRow)/2)):]),3)
+    EWCT_BottomAvrg= \
+        round(mean(dfProfileMultRow['EWCT'].to_list()[0:int(len(dfProfileMultRow)/2)]),3)
+    NSCT_BottomAvrg= \
+        round(mean(dfProfileMultRow['NSCT'].to_list()[0:int(len(dfProfileMultRow)/2)]),3)
+    EWCT_TopAvrg= \
+        round(mean(dfProfileMultRow['EWCT'].to_list()[int(len(dfProfileMultRow)/2):]),3)
+    NSCT_TopAvrg= \
+        round(mean(dfProfileMultRow['NSCT'].to_list()[int(len(dfProfileMultRow)/2):]),3)
   
-    tempSrAvrg=pd.Series([EWCT_BottomAvrg, NSCT_BottomAvrg,EWCT_TopAvrg,NSCT_TopAvrg])
+    [Int_Bottom,Dir_Bottom]=Coord_Cart_to_Polar(EWCT_BottomAvrg,NSCT_BottomAvrg)
+    [Int_Top,Dir_Top]=Coord_Cart_to_Polar(EWCT_TopAvrg,NSCT_TopAvrg)
+  
+    tempSrAvrg=pd.Series([EWCT_BottomAvrg, NSCT_BottomAvrg, \
+                          Int_Bottom,Dir_Bottom,\
+                          EWCT_TopAvrg,NSCT_TopAvrg, \
+                          Int_Top,Dir_Top])
     finalProfileDfAvrg=finalProfileDfAvrg.append(tempSrAvrg,ignore_index=True)
 
 
 #%% elaborazione dataframe con timeseries
 
-dfList[1]=dfList[1].drop(['time','latitude','longitude','PRES_QC','TEMP_QC','RVFL_QC'],axis='columns');
+dfList[1]=dfList[1].drop(['time','latitude','longitude', \
+                          'PRES_QC','TEMP_QC','RVFL_QC'],axis='columns');
 
 dfList[1]=noHeaderDf(dfList[1])
 
@@ -146,13 +160,15 @@ finalDfAvrg=pd.concat([timeDf,dfList[1], finalProfileDfAvrg],axis=1)
 startColoumnName=["dateTime", "latitude", "longitude"]  
 profileColoumnName=[]
 for rowIdx in range(int(len(finalProfileDf.columns)/5)):
-    profileColoumnName=profileColoumnName+["PROFILE #","DEPTH", "VCSP", "EWCT", "NSCT"]
+    profileColoumnName=profileColoumnName+["PROFILE #","DEPTH", "VCSP", \
+                                           "EWCT", "NSCT"]
 tsColoumnName=["PRES","TEMP","RVFL"]
 
 finalColoumnName=startColoumnName+tsColoumnName+profileColoumnName
 finalDf = finalDf.set_axis(finalColoumnName, axis=1)   
 
-avrgColumns=['EWCT_BottomAvrg','NSCT_BottomAvrg','EWCT_TopAvrg','NSCT_TopAvrg']
+avrgColumns=['EWCT_BottomAvrg','NSCT_Bottom','Int_Bottom','Dir_BottomAvrg', \
+             'EWCT_TopAvrg','NSCT_TopAvrg','Int_Top','Dir_Top']
 finalColoumnNameAvrg=startColoumnName+tsColoumnName+avrgColumns
 finalDfAvrg = finalDfAvrg.set_axis(finalColoumnNameAvrg, axis=1) 
 
@@ -174,3 +190,4 @@ tempTimeObj.write(timeString)
 tempTimeObj.close() 
 
 #%%  
+

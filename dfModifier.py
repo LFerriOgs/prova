@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Aug  9 07:32:30 2024
+@author: Lorenzo Ferri    09/08/2024
 
-@author: Lorenzo
 """
+
 import pandas as pd
 import os
 
