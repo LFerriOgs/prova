@@ -1,10 +1,8 @@
 """
-@author: Lorenzo Ferri   09/08/2024
+@author: Lorenzo Ferri   29/08/2024
 
 Questo è un programma che estrapola automaticamente i dati dal database ERDDAP 
-e crea un csv con, in ogni singola riga, un record di tempo seguito da longitudine
-latitudine, i parametri dei vari profili (sempre sulla stessa riga) e i valori 
-di time series.
+
 Se il server su cui gira questo script si blocca, esso automaticamente tiene 
 conto dell'ultima data effettiva di acquisizione e riprende da quel punto.
 
@@ -22,8 +20,9 @@ import pandas as pd
 import sys
 from io import StringIO
 from numpy import mean
-from cartToPolar import Coord_Cart_to_Polar
 
+
+from axisModifier import Coord_Cart_to_Polar_North
 from dfModifier import noHeaderDf, dfToOneRow
 
  # %% variabili da settare 
@@ -35,7 +34,7 @@ endUrlString=["&orderBy(%22time%2Cdepth%22)","&orderBy(%22time%22)"];
 # %% controllo dateList per definizione datetime
 
 tempTimeObj=open("dateList.txt",'r')
-tempTime=tempTimeObj.read()
+tempTime=tempTimeObj.read() 
 tempTimeObj.close()
 
 if tempTime =="":
@@ -89,6 +88,9 @@ timeDf['longitude'] = dfList[1]['longitude','degrees_east']
 
 #%% elaborazione dataframe con profili  
 
+dfList[0]=dfList[0].iloc[::-1]
+dfList[0]=dfList[0].reset_index(drop="True")
+
 dfList[0]=dfList[0].drop(['latitude','longitude','VCSP_QC','EWCT_QC','NSCT_QC'], \
                          axis='columns'); 
                          
@@ -104,6 +106,10 @@ keys=list(gr.groups.keys())
 finalProfileDf=pd.DataFrame() 
 finalProfileDfAvrg=pd.DataFrame() 
 
+currAvrg=pd.Series(dtype="float64")                                             # array che conterrà la media delle velocità mediata su ogni sezione per ogni data
+port_BottomSeries=pd.Series(dtype="float64")                                    # array che conterrà la somma delle sezioni inferiori di ogni data
+port_TopSeries=pd.Series(dtype="float64")                                       # array che conterrà la somma delle sezioni superiori di ogni data
+
 for keyIdx in range (len(keys)):  
     
     #parte di riempimento del df con tutti i profili
@@ -114,7 +120,7 @@ for keyIdx in range (len(keys)):
     dfProfile=dfToOneRow(dfProfile)
     finalProfileDf=pd.concat([finalProfileDf,dfProfile],ignore_index=True)
 
-    #parte di riempimento del df con le medie
+    #parte di riempimento del df con le medie, intensità e direzione
     dfProfileMultRow=gr.get_group(keys[keyIdx])
     dfProfileMultRow=dfProfileMultRow.drop(['time','depth','VCSP'],\
                                            axis='columns');
@@ -132,18 +138,23 @@ for keyIdx in range (len(keys)):
         round(mean(dfProfileMultRow['EWCT'].to_list()[int(len(dfProfileMultRow)/2):]),3)
     NSCT_TopAvrg= \
         round(mean(dfProfileMultRow['NSCT'].to_list()[int(len(dfProfileMultRow)/2):]),3)
+    
+    [Int_Bottom,Dir_Bottom]=Coord_Cart_to_Polar_North(EWCT_BottomAvrg,NSCT_BottomAvrg)
+    [Int_Top,Dir_Top]=Coord_Cart_to_Polar_North(EWCT_TopAvrg,NSCT_TopAvrg)
   
-    [Int_Bottom,Dir_Bottom]=Coord_Cart_to_Polar(EWCT_BottomAvrg,NSCT_BottomAvrg)
-    [Int_Top,Dir_Top]=Coord_Cart_to_Polar(EWCT_TopAvrg,NSCT_TopAvrg)
-  
+    Int_avrg=mean([Int_Top,Int_Bottom])
+    currAvrg=currAvrg.append(pd.Series(Int_avrg))
+    
     tempSrAvrg=pd.Series([EWCT_BottomAvrg, NSCT_BottomAvrg, \
                           Int_Bottom,Dir_Bottom,\
                           EWCT_TopAvrg,NSCT_TopAvrg, \
                           Int_Top,Dir_Top])
     finalProfileDfAvrg=finalProfileDfAvrg.append(tempSrAvrg,ignore_index=True)
+    
+#stoccaggio dati elaborati in series apposite 
+currAvrg=currAvrg.reset_index(drop=True)
 
-
-#%% elaborazione dataframe con timeseries
+#%% elaborazione dataframe con timeseriesd  
 
 dfList[1]=dfList[1].drop(['time','latitude','longitude', \
                           'PRES_QC','TEMP_QC','RVFL_QC'],axis='columns');
@@ -173,8 +184,8 @@ finalColoumnNameAvrg=startColoumnName+tsColoumnName+avrgColumns
 finalDfAvrg = finalDfAvrg.set_axis(finalColoumnNameAvrg, axis=1) 
 
 #%% scrittura del dataframe finale su file
-
-currentDateTimeString=datetime.now().strftime("%Y-%m-%dT%H-%M-%SZ")    
+currentDateTime=datetime.now()
+currentDateTimeString=currentDateTime.strftime("%Y-%m-%dT%H-%M-%SZ")    
 csvFileName='csv/ERDDAP_CurrIso_'+currentDateTimeString+'.csv'  
 csvFileNameAvrg='csv/ERDDAP_CurrIso_'+currentDateTimeString+'_Avrg.csv'  
 
@@ -189,5 +200,7 @@ tempTimeObj=open("dateList.txt",'w')
 tempTimeObj.write(timeString)
 tempTimeObj.close() 
 
-#%%  
+
+
+
 

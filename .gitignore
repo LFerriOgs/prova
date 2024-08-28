@@ -1,3 +1,4 @@
 *.csv
 dateList.txt
-
+/.spyproject
+/__pycache__

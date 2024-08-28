@@ -1,15 +1,29 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Aug 19 14:08:32 2024
+@author: Lorenzo Ferri 
 
-@author: Lorenzo Ferri based on Fabio Brunetti script
-
-Converto i dati ENU in Intensità e Gradi Nord
 """ 
 
 import math 
 
-def Coord_Cart_to_Polar (E,N):
+#questa funzione è praticamente la matrice di rotazione 2d in forma di sistema con angolo in gradi
+def componentAxisTranslationDegree(oldX,oldY,theta):
+    newX=oldX*math.cos(math.radians(theta))+oldY*math.sin(math.radians(theta))
+    newY=oldY*math.cos(math.radians(theta))-oldX*math.sin(math.radians(theta))
+    return newX,newY
+
+#questa funzione serve per trasformare da coordinate cartesiane a coordianate
+#polari (NB i gradi vanno da 0 a +360)
+def Coord_Cart_to_Polar (x,y):
+    intensity = round(math.sqrt(x*x+y*y),3)
+    direction=round(math.degrees(math.atan2(y,x)),2)
+    if direction <0 : direction =direction +360
+    return intensity, direction
+
+#questa funzione serve per trasformare da coordinate cartesiane a coordianate
+#polari riferite a nord con grai positivi in senso orario
+def Coord_Cart_to_Polar_North (E,N):
    
     Int = round(math.sqrt(E*E+N*N),3)
     if E>0 and N>0:
