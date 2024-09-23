@@ -1,16 +1,3 @@
-"""
-@author: Lorenzo Ferri   29/08/2024
-
-Questo è un programma che estrapola automaticamente i dati dal database ERDDAP 
-
-Se il server su cui gira questo script si blocca, esso automaticamente tiene 
-conto dell'ultima data effettiva di acquisizione e riprende da quel punto.
-
-NB) assolutamente non cancellare il file "dateList.txt" o cancellarne o modificarne
-    il contenuto.
-
-"""
-
 # %% importazione delle librerie
 
 from urllib.request import urlopen
@@ -20,16 +7,98 @@ import pandas as pd
 import sys
 from io import StringIO
 from numpy import mean
+import math
+import os
 
 
-from axisModifier import Coord_Cart_to_Polar_North
-from dfModifier import noHeaderDf, dfToOneRow
+#%% libreria axisModifier
 
- # %% variabili da settare 
+def componentAxisTranslationDegree(oldX,oldY,theta):
+    newX=oldX*math.cos(math.radians(theta))+oldY*math.sin(math.radians(theta))
+    newY=oldY*math.cos(math.radians(theta))-oldX*math.sin(math.radians(theta))
+    return newX,newY
 
-startUrlString=["https://nodc.ogs.it/erddap/tabledap/CURRISO_PR.htmlTable?time%2Clatitude%2Clongitude%2Cdepth%2CVCSP%2CVCSP_QC%2CEWCT%2CEWCT_QC%2CNSCT%2CNSCT_QC&time%3E",
-                "https://nodc.ogs.it/erddap/tabledap/CURRISO_TS.htmlTable?time%2Clatitude%2Clongitude%2CPRES%2CPRES_QC%2CTEMP%2CTEMP_QC%2CRVFL%2CRVFL_QC&time%3E"];
+def Coord_Cart_to_Polar (x,y):
+    intensity = round(math.sqrt(x*x+y*y),3)
+    direction=round(math.degrees(math.atan2(y,x)),2)
+    if direction <0 : direction =direction +360
+    return intensity, direction
+
+def Coord_Cart_to_Polar_North (E,N):
+   
+    Int = round(math.sqrt(E*E+N*N),3)
+    if E>0 and N>0:
+        Dir = round(90-math.degrees(math.atan2(N,E)),2)
+       # print ("Primo Quadrante", E, N, Int, Dir)
+    elif E>0 and N<0:
+        alfa = math.degrees(math.atan2(N, E))
+        Dir = round(90 + abs(alfa),2)
+        #print ("Secondo Quadrante", E, N, Int, Dir)
+    elif E<0 and N<0:
+        alfa = math.degrees(math.atan2(N, E))
+        Dir = round(90 + abs(alfa),2)
+        #print ("Terzo Quadrante", E, N, Int, Dir) #, round(alfa,2))
+    elif E<0 and N>0:
+        alfa = math.degrees(math.atan2(N, E))
+        Dir = round(360 - (abs(alfa) - 90),2)
+        #print ("Quarto Quadrante", E, N, Int, Dir) #, round(alfa,2))
+    elif E==0 and N>0:
+        Dir=0.00
+        #print ("Nord secco", E, N, Int, Dir) #, round(alfa,2))
+    elif E==0 and N<0:
+        Dir=180.00
+        #print ("Sud secco", E, N, Int, Dir) #, round(alfa,2))
+    elif E>0 and N==0:
+        Dir=90.00
+        #print ("Est secco", E, N, Int, Dir) #, round(alfa,2))
+    elif E<0 and N==0:
+        Dir=270.00
+        #print ("Ovest secco", E, N, Int, Dir) #, round(alfa,2))
+    elif E==0 and N==0:
+        Dir=0.00
+        #print ("Non c'é corrente", E, N, Int, Dir) #, round(alfa,2))
+                
+    return Int, Dir
+
+
+#%% libreria dfModifier
+
+def dfToOneRow (df):
+    
+    df.to_csv("temp.csv", index=False, header=False)
+    
+    tempStringObj=open("temp.csv",'r')
+    tempString=tempStringObj.read()
+    tempStringObj.close()
+    
+    tempStringMod = tempString.replace("\n", ",")
+    tempStringMod=tempStringMod[:-1]
+    
+    tempStringObj=open("temp.csv",'w')
+    tempStringObj.write(tempStringMod)
+    tempStringObj.close()
+    df=pd.read_csv("temp.csv",header=None)
+    os.remove("temp.csv")
+    return df
+
+def noHeaderDf(df):
+    
+    df.to_csv("temp.csv",index=False,header=False)
+    df=pd.read_csv("temp.csv",header=None)
+    os.remove("temp.csv")
+    return df # %% variabili da settare 
+
+
+# %% variabili da settare 
+
+startUrlString=["https://nodc.ogs.it/erddap/tabledap/CURRISO_PR.htmlTable?
+                time%2Clatitude%2Clongitude%2Cdepth%2CVCSP%2CVCSP_QC%2CEWCT
+                %2CEWCT_QC%2CNSCT%2CNSCT_QC&time%3E",
+                "https://nodc.ogs.it/erddap/tabledap/CURRISO_TS.htmlTable?
+                time%2Clatitude%2Clongitude%2CPRES%2CPRES_QC%2CTEMP%2CTEMP_QC
+                %2CRVFL%2CRVFL_QC&time%3E"];
 endUrlString=["&orderBy(%22time%2Cdepth%22)","&orderBy(%22time%22)"];
+
 
 # %% controllo dateList per definizione datetime
 
@@ -44,6 +113,7 @@ if tempTime =="":
     
 newDateTime=datetime.strptime(tempTime, "%Y-%m-%dT%H-%M-%SZ")
 
+
 # %% lettura dei dati web attraverso BeautifulSoup
 
 newUrlString=[]
@@ -51,8 +121,6 @@ dfList=[]
 
 try:
     for urlIdx in range(len(startUrlString)):
-    
-    #-------------------------composizione della stringa per la query al sito 
     
         newUrlString.append(startUrlString[urlIdx]+ \
                     newDateTime.strftime("%Y-%m-%dT")+ \
@@ -62,8 +130,6 @@ try:
                     "%3A"+ \
                     newDateTime.strftime("%SZ") +\
                     endUrlString[urlIdx] );
-
-    # -- creazione oggetto di beatifulsoup e relativo dataframe pandas
         
         html = urlopen(newUrlString[urlIdx]);
         soup= BeautifulSoup(html.read(),'html.parser');
@@ -73,6 +139,7 @@ try:
 except:  
     print("\nnon ci sono nuovi record\n")
     sys.exit()
+    
     
 # %% creazione finalDf con data e ora
 
@@ -86,8 +153,8 @@ timeDf=timeDf.drop('tempDate',axis='columns');
 timeDf['latitude'] = dfList[1]['latitude','degrees_north']
 timeDf['longitude'] = dfList[1]['longitude','degrees_east']
 
-#%% elaborazione dataframe con profili  
 
+#%% elaborazione dataframe con profili  
 
 dfList[0]=dfList[0].drop(['latitude','longitude','VCSP_QC','EWCT_QC',\
                           'NSCT_QC'], axis='columns');                          
@@ -103,9 +170,7 @@ keys=list(gr.groups.keys())
 finalProfileDf=pd.DataFrame() 
 finalProfileDfAvrg=pd.DataFrame() 
 
-currAvrg=pd.Series(dtype="float64")                                             # array che conterrà la media delle velocità mediata su ogni sezione per ogni data
-port_BottomSeries=pd.Series(dtype="float64")                                    # array che conterrà la somma delle sezioni inferiori di ogni data
-port_TopSeries=pd.Series(dtype="float64")                                       # array che conterrà la somma delle sezioni superiori di ogni data
+currAvrg=pd.Series(dtype="float64")                                             
 
 for keyIdx in range (len(keys)):  
     
@@ -122,7 +187,7 @@ for keyIdx in range (len(keys)):
     #parte di riempimento del df con le medie, intensità e direzione
     dfProfileMultRow=gr.get_group(keys[keyIdx])
     dfProfileMultRow=dfProfileMultRow.drop(['time','depth','VCSP'],\
-                                        axis='columns');
+                                           axis='columns');
     dfProfileMultRow=dfProfileMultRow.iloc[::-1]                            
     dfProfileMultRow=dfProfileMultRow.reset_index(drop=True)
     
@@ -151,21 +216,23 @@ for keyIdx in range (len(keys)):
                           Int_Top,Dir_Top])
     finalProfileDfAvrg=finalProfileDfAvrg.append(tempSrAvrg,ignore_index=True)
     
-#stoccaggio dati elaborati in series apposite 
 currAvrg=currAvrg.reset_index(drop=True)
 
-#%% elaborazione dataframe con timeseriesd
+
+#%% elaborazione dataframe con timeseries
 
 dfList[1]=dfList[1].drop(['time','latitude','longitude', \
                           'PRES_QC','TEMP_QC','RVFL_QC'],axis='columns');
 
 dfList[1]=noHeaderDf(dfList[1])
 
+
 #%% concatenazione diversi dataframe in quello finale
 
 finalDf=pd.concat([timeDf,dfList[1], finalProfileDf],axis=1)    
 finalDfAvrg=pd.concat([timeDf,dfList[1], finalProfileDfAvrg],axis=1)    
     
+
 # %% set coloumn name 
 
 startColoumnName=["dateTime", "latitude", "longitude"]  
@@ -178,10 +245,11 @@ tsColoumnName=["PRES","TEMP","RVFL"]
 finalColoumnName=startColoumnName+tsColoumnName+profileColoumnName
 finalDf = finalDf.set_axis(finalColoumnName, axis=1)   
 
-avrgColumns=['EWCT_BottomAvrg','NSCT_BottomAvrg','Int_BottomAvrg','Dir_BottomAvrg', \
+avrgColumns=['EWCT_BottomAvrg','NSCT_BottomAvrg','Int_BottomAvrg','Dir_BottomAvrg',\
              'EWCT_TopAvrg','NSCT_TopAvrg','Int_TopAvrg','Dir_TopAvrg']
 finalColoumnNameAvrg=startColoumnName+tsColoumnName+avrgColumns
 finalDfAvrg = finalDfAvrg.set_axis(finalColoumnNameAvrg, axis=1) 
+
 
 #%% scrittura del dataframe finale su file
 currentDateTime=datetime.now()
