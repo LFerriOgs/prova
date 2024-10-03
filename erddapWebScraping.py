@@ -143,13 +143,13 @@ for keyIdx in range (len(keys)):
     [Int_Top,Dir_Top]=Coord_Cart_to_Polar_North(EWCT_TopAvrg,NSCT_TopAvrg)
   
     Int_avrg=mean([Int_Top,Int_Bottom])
-    currAvrg=currAvrg.append(pd.Series(Int_avrg))
+    currAvrg=currAvrg._append(pd.Series(Int_avrg))
     
     tempSrAvrg=pd.Series([EWCT_BottomAvrg, NSCT_BottomAvrg, \
                           Int_Bottom,Dir_Bottom,\
                           EWCT_TopAvrg,NSCT_TopAvrg, \
                           Int_Top,Dir_Top])
-    finalProfileDfAvrg=finalProfileDfAvrg.append(tempSrAvrg,ignore_index=True)
+    finalProfileDfAvrg=finalProfileDfAvrg._append(tempSrAvrg,ignore_index=True)
     
 #stoccaggio dati elaborati in series apposite 
 currAvrg=currAvrg.reset_index(drop=True)
