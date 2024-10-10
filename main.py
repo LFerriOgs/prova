@@ -74,7 +74,7 @@ except:
 
 finalDf=pd.DataFrame()
 
-finalDf['tempDate'] = pd.to_datetime(dfList[1]['time','UTC'], format='%Y-%m-%dT%H:%M:%SZ');  
+finalDf['tempDate'] = pd.to_datetime(dfList[1]['time','UTC'], format='%Y-%m-%dT%H:%M:%SZ');
 finalDf['date'] = finalDf['tempDate'].dt.strftime('%d/%m/%Y');
 finalDf['time'] = finalDf['tempDate'].dt.strftime('%H:%M:%S');
 finalDf=finalDf.drop('tempDate',axis='columns');
@@ -136,7 +136,7 @@ endTime=dfList[0].time[len(dfList[0])-1]
 endTime=datetime.strptime(endTime, '%Y-%m-%dT%H:%M:%SZ')
 timeString=datetime.strftime(endTime, '%d-%m-%Y %H:%M:%S')
 
-tempTimeObj=open("dateList.txt",'w')
+tempTimeObj=open("dateList.txt", "w")
 tempTimeObj.write(timeString)
 tempTimeObj.close() 
 
