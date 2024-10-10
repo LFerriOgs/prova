@@ -1,0 +1,3 @@
+[submodule "myModule"]
+	path = myModule
+	url = https://github.com/LFerriOgs/myPythonModule
